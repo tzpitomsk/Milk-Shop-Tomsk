@@ -39,3 +39,37 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/lib/generated/prisma
+
+# Local SQLite database
+/dev.db
+/dev_backup.db
+
+# Local AI/editor settings
+/.agents/
+/.claude/
+/.vscode/
+/.windsurf/
+
+# Local test/debug output
+/seed-error.txt
+
+# Local SQLite database
+/dev.db
+/dev_backup.db
+
+# Local AI/editor settings
+/.agents/
+/.claude/
+/.vscode/
+/.windsurf/
+
+# Local test/debug output
+/seed-error.txt
+
+# Generated Prisma Client
+/generated/
+
+# Local SQLite databases and backups inside prisma
+/prisma/*.db

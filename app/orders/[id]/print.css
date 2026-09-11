@@ -1,0 +1,46 @@
+@media print {
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  body {
+    background: white !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #receipt,
+  #receipt * {
+    visibility: visible;
+  }
+
+  #receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+
+    width: 100%;
+    max-width: 700px;
+
+    margin: 0 auto;
+    padding: 20px;
+
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  nav {
+    display: none !important;
+  }
+}

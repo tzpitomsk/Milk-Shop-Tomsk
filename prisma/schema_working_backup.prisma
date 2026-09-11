@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+enum OrderStatus {
+  COMPLETED
+  PARTIAL_RETURN
+  RETURNED
+}
+
+model Product {
+  id Int @id @default(autoincrement())
+
+  name String
+  unit String
+
+  price Int
+  cost  Int
+
+  stock Int @default(0)
+
+  barcode String? @unique
+
+  batches     Batch[]
+  orderItems  OrderItem[]
+  supplyItems SupplyItem[]
+  movements   Movement[]
+}
+
+model Batch {
+  id Int @id @default(autoincrement())
+
+  quantity Int
+
+  purchaseCost Int @default(0)
+
+  receivedAt DateTime @default(now())
+
+  expiryDate DateTime
+
+  status String @default("ACTIVE")
+
+  productId Int
+
+  product Product @relation(fields: [productId], references: [id])
+
+  orderBatches OrderBatch[]
+}
+
+model Customer {
+  id Int @id @default(autoincrement())
+
+  name String
+
+  phone String?
+
+  address String?
+
+  orders Order[]
+}
+
+model Order {
+  id Int @id @default(autoincrement())
+
+  total Int
+
+  profit Int @default(0)
+
+  date DateTime @default(now())
+
+  status OrderStatus @default(COMPLETED)
+
+  customerId Int?
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id Int @id @default(autoincrement())
+
+  quantity Int
+
+  price Int
+
+  productId Int
+
+  orderId Int
+
+  product Product @relation(fields: [productId], references: [id])
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  batches OrderBatch[]
+}
+
+model OrderBatch {
+  id Int @id @default(autoincrement())
+
+  quantity Int
+
+  orderItemId Int
+
+  batchId Int
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+
+  batch Batch @relation(fields: [batchId], references: [id])
+}
+
+model Supply {
+  id Int @id @default(autoincrement())
+
+  date DateTime @default(now())
+
+  items SupplyItem[]
+}
+
+model SupplyItem {
+  id Int @id @default(autoincrement())
+
+  quantity Int
+
+  purchaseCost Int @default(0)
+
+  supplyId Int
+
+  productId Int
+
+  supply Supply @relation(fields: [supplyId], references: [id])
+
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model Movement {
+  id Int @id @default(autoincrement())
+
+  type String
+
+  quantity Int
+
+  comment String?
+
+  date DateTime @default(now())
+
+  productId Int
+
+  product Product @relation(fields: [productId], references: [id])
+}

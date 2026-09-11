@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Product {
+  id          Int          @id @default(autoincrement())
+  name        String
+  unit        String
+  price       Int
+  cost        Int
+  stock       Int          @default(0)
+  barcode     String?      @unique
+  batches     Batch[]
+  movements   Movement[]
+  orderItems  OrderItem[]
+  supplyItems SupplyItem[]
+}
+
+model Batch {
+  id           Int           @id @default(autoincrement())
+  quantity     Int
+  purchaseCost Int           @default(0)
+  receivedAt   DateTime      @default(now())
+  expiryDate   DateTime
+  status       String        @default("ACTIVE")
+  productId    Int
+  product      Product       @relation(fields: [productId], references: [id])
+  orderBatches OrderBatch[]
+  ReturnBatch  ReturnBatch[]
+}
+
+model Customer {
+  id      Int     @id @default(autoincrement())
+  name    String
+  phone   String?
+  address String?
+  orders  Order[]
+}
+
+model Order {
+  id         Int         @id @default(autoincrement())
+  total      Int
+  profit     Int         @default(0)
+  date       DateTime    @default(now())
+  customerId Int?
+  status     OrderStatus @default(COMPLETED)
+  customer   Customer?   @relation(fields: [customerId], references: [id])
+  items      OrderItem[]
+}
+
+model OrderItem {
+  id          Int           @id @default(autoincrement())
+  quantity    Int
+  returned    Int           @default(0)
+  price       Int
+  productId   Int
+  orderId     Int
+  batches     OrderBatch[]
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product       @relation(fields: [productId], references: [id])
+  ReturnBatch ReturnBatch[]
+}
+
+model OrderBatch {
+  id           Int       @id @default(autoincrement())
+  quantity     Int
+  purchaseCost Int       @default(0)
+  orderItemId  Int
+  batchId      Int
+  orderItem    OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  batch        Batch     @relation(fields: [batchId], references: [id])
+}
+
+model Supply {
+  id         Int          @id @default(autoincrement())
+  date       DateTime     @default(now())
+  supplierId Int
+  total      Int
+  Supplier   Supplier     @relation(fields: [supplierId], references: [id])
+  items      SupplyItem[]
+}
+
+model SupplyItem {
+  id        Int     @id @default(autoincrement())
+  quantity  Int
+  cost      Int
+  productId Int
+  supplyId  Int
+  supply    Supply  @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model Movement {
+  id        Int      @id @default(autoincrement())
+  type      String
+  quantity  Int
+  comment   String?
+  createdAt DateTime @default(now())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model ReturnBatch {
+  id          Int       @id @default(autoincrement())
+  quantity    Int
+  createdAt   DateTime  @default(now())
+  orderItemId Int
+  batchId     Int
+  OrderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  Batch       Batch     @relation(fields: [batchId], references: [id])
+}
+
+model Supplier {
+  id      Int      @id @default(autoincrement())
+  name    String
+  phone   String?
+  address String?
+  Supply  Supply[]
+}
+
+enum OrderStatus {
+  COMPLETED
+  PARTIAL_RETURN
+  RETURNED
+}
