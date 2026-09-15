@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 
 import StatsGrid from "@/components/stats-grid";
-import SalesChart from "@/components/dashboard/SalesChart";
 import TopProducts from "@/components/dashboard/TopProducts";
 import Alerts from "@/components/dashboard/Alerts";
 import QuickActions from "@/components/dashboard/QuickActions";
@@ -169,7 +168,6 @@ export default function HomePage() {
     </section>
 
     <section className="mb-8">
-      <SalesChart data={data.salesByDay} />
     </section>
 
     <section className="mb-8 grid gap-6 lg:grid-cols-2">
