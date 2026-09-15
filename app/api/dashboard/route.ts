@@ -64,8 +64,6 @@ for (const batch of batches) {
 // =========================================================================
 // ФИНАНСЫ
 //
-// Используем ту же NET-логику, что и Product details:
-//
 // revenue =
 //   item.price * (item.quantity - item.returned)
 //
@@ -86,21 +84,18 @@ function getOrderFinancials(order: (typeof orders)[number]) {
   let returnedCost = 0;
 
   for (const item of order.items) {
-    const realSoldQuantity =
-      item.quantity - item.returned;
+    const realSoldQuantity = item.quantity - item.returned;
 
     revenue += item.price * realSoldQuantity;
 
     for (const orderBatch of item.batches) {
       originalCost +=
-        orderBatch.quantity *
-        orderBatch.purchaseCost;
+        orderBatch.quantity * orderBatch.purchaseCost;
     }
 
     for (const returnBatch of item.ReturnBatch) {
       returnedCost +=
-        returnBatch.quantity *
-        returnBatch.Batch.purchaseCost;
+        returnBatch.quantity * returnBatch.Batch.purchaseCost;
     }
   }
 
@@ -158,12 +153,18 @@ const averageCheck =
 
 // =========================================================================
 // ОСТАТКИ
+//
+// Та же классификация, что и на странице /products:
+//
+// 0      -> нет в наличии
+// 1–2    -> заканчивается
+// 3+     -> в наличии
 // =========================================================================
 
 const lowStockProducts = products
   .filter(
     (product) =>
-      product.stock > 0 && product.stock <= 5
+      product.stock > 0 && product.stock <= 2
   )
   .sort((a, b) => a.stock - b.stock);
 
@@ -201,8 +202,7 @@ for (let i = 6; i >= 0; i--) {
       );
     })
     .reduce((sum, order) => {
-      const financials =
-        getOrderFinancials(order);
+      const financials = getOrderFinancials(order);
 
       return sum + financials.revenue;
     }, 0);
