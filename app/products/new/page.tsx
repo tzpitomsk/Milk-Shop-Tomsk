@@ -13,6 +13,7 @@ export default function NewProductPage() {
   const [cost, setCost] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
@@ -23,17 +24,19 @@ export default function NewProductPage() {
       return;
     }
 
+    setError("");
+
     const trimmedName = name.trim();
     const trimmedBarcode = barcode.trim();
     const trimmedUnit = unit.trim();
 
     if (!trimmedName) {
-      alert("Введите название товара");
+      setError("Введите название товара");
       return;
     }
 
     if (!trimmedUnit) {
-      alert("Введите единицу измерения");
+      setError("Введите единицу измерения");
       return;
     }
 
@@ -44,7 +47,7 @@ export default function NewProductPage() {
       !Number.isInteger(numericPrice) ||
       numericPrice < 0
     ) {
-      alert("Введите корректную цену");
+      setError("Введите корректную цену");
       return;
     }
 
@@ -52,7 +55,7 @@ export default function NewProductPage() {
       !Number.isInteger(numericCost) ||
       numericCost < 0
     ) {
-      alert("Введите корректную себестоимость");
+      setError("Введите корректную себестоимость");
       return;
     }
 
@@ -81,14 +84,12 @@ export default function NewProductPage() {
         );
       }
 
-      alert("Товар успешно создан");
-
       router.push("/products");
       router.refresh();
     } catch (error) {
-      console.error(error);
+      console.error("CREATE PRODUCT ERROR:", error);
 
-      alert(
+      setError(
         error instanceof Error
           ? error.message
           : "Ошибка создания товара"
@@ -99,182 +100,184 @@ export default function NewProductPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">
-          Новый товар
+    <main className="min-h-screen bg-slate-100 p-3">
+      <div className="mx-auto max-w-md rounded-2xl bg-white p-4 shadow">
+        <h1 className="mb-4 text-2xl font-bold text-green-700">
+          ➕ Новый товар
         </h1>
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          Остаток нового товара начинается с 0 и формируется
-          только через партии поставок.
+        <p className="mb-4 text-sm text-gray-500">
+          Начальный остаток нового товара всегда равен 0.
+          Остаток формируется через партии поставок.
         </p>
+
+        {error && (
+          <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            <div className="font-bold">❌ Ошибка</div>
+            <div className="mt-1">{error}</div>
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-3"
+        >
+          {/* Название */}
+          <div>
+            <label
+              htmlFor="name"
+              className="mb-1 block text-sm font-bold text-gray-700"
+            >
+              Название товара
+            </label>
+
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(event) =>
+                setName(event.target.value)
+              }
+              placeholder="Например: Молоко 1,5 л"
+              disabled={loading}
+              className="w-full rounded-xl border p-2.5"
+            />
+          </div>
+
+          {/* Штрихкод */}
+          <div>
+            <label
+              htmlFor="barcode"
+              className="mb-1 block text-sm font-bold text-gray-700"
+            >
+              Штрихкод
+            </label>
+
+            <input
+              id="barcode"
+              type="text"
+              inputMode="numeric"
+              value={barcode}
+              onChange={(event) =>
+                setBarcode(event.target.value)
+              }
+              placeholder="Необязательно"
+              disabled={loading}
+              className="w-full rounded-xl border p-2.5"
+            />
+          </div>
+
+          {/* Единица измерения */}
+          <div>
+            <label
+              htmlFor="unit"
+              className="mb-1 block text-sm font-bold text-gray-700"
+            >
+              Единица измерения
+            </label>
+
+            <input
+              id="unit"
+              type="text"
+              value={unit}
+              onChange={(event) =>
+                setUnit(event.target.value)
+              }
+              placeholder="шт"
+              disabled={loading}
+              className="w-full rounded-xl border p-2.5"
+            />
+          </div>
+
+          {/* Цена */}
+          <div>
+            <label
+              htmlFor="price"
+              className="mb-1 block text-sm font-bold text-gray-700"
+            >
+              Цена продажи, ₽
+            </label>
+
+            <input
+              id="price"
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              value={price}
+              onChange={(event) =>
+                setPrice(event.target.value)
+              }
+              placeholder="0"
+              disabled={loading}
+              className="w-full rounded-xl border p-2.5"
+            />
+          </div>
+
+          {/* Себестоимость */}
+          <div>
+            <label
+              htmlFor="cost"
+              className="mb-1 block text-sm font-bold text-gray-700"
+            >
+              Себестоимость, ₽
+            </label>
+
+            <input
+              id="cost"
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              value={cost}
+              onChange={(event) =>
+                setCost(event.target.value)
+              }
+              placeholder="0"
+              disabled={loading}
+              className="w-full rounded-xl border p-2.5"
+            />
+          </div>
+
+          {/* Начальный остаток */}
+          <div className="rounded-xl border bg-slate-50 p-3">
+            <div className="text-sm font-bold text-gray-700">
+              📦 Начальный остаток
+            </div>
+
+            <div className="mt-1 text-xl font-bold">
+              0
+            </div>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Остаток нельзя вводить вручную. Для добавления
+              товара на склад создайте поставку.
+            </p>
+          </div>
+
+          {/* Кнопки */}
+          <div className="mt-4 space-y-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-green-700 py-2.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading
+                ? "⏳ Создание..."
+                : "💾 Создать товар"}
+            </button>
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => router.push("/products")}
+              className="w-full rounded-xl bg-gray-200 py-2.5 font-bold disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              ↩️ Отмена
+            </button>
+          </div>
+        </form>
       </div>
-
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-5"
-      >
-        {/* Название */}
-
-        <div className="space-y-2">
-          <label
-            htmlFor="name"
-            className="text-sm font-medium"
-          >
-            Название товара
-          </label>
-
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(event) =>
-              setName(event.target.value)
-            }
-            placeholder="Например, Молоко 1,5 л"
-            disabled={loading}
-            className="w-full rounded-lg border bg-background px-3 py-2"
-          />
-        </div>
-
-        {/* Штрихкод */}
-
-        <div className="space-y-2">
-          <label
-            htmlFor="barcode"
-            className="text-sm font-medium"
-          >
-            Штрихкод
-          </label>
-
-          <input
-            id="barcode"
-            type="text"
-            value={barcode}
-            onChange={(event) =>
-              setBarcode(event.target.value)
-            }
-            placeholder="Необязательно"
-            disabled={loading}
-            className="w-full rounded-lg border bg-background px-3 py-2"
-          />
-        </div>
-
-        {/* Единица */}
-
-        <div className="space-y-2">
-          <label
-            htmlFor="unit"
-            className="text-sm font-medium"
-          >
-            Единица измерения
-          </label>
-
-          <input
-            id="unit"
-            type="text"
-            value={unit}
-            onChange={(event) =>
-              setUnit(event.target.value)
-            }
-            placeholder="шт"
-            disabled={loading}
-            className="w-full rounded-lg border bg-background px-3 py-2"
-          />
-        </div>
-
-        {/* Цена */}
-
-        <div className="space-y-2">
-          <label
-            htmlFor="price"
-            className="text-sm font-medium"
-          >
-            Цена продажи
-          </label>
-
-          <input
-            id="price"
-            type="number"
-            min="0"
-            step="1"
-            value={price}
-            onChange={(event) =>
-              setPrice(event.target.value)
-            }
-            placeholder="0"
-            disabled={loading}
-            className="w-full rounded-lg border bg-background px-3 py-2"
-          />
-        </div>
-
-        {/* Себестоимость */}
-
-        <div className="space-y-2">
-          <label
-            htmlFor="cost"
-            className="text-sm font-medium"
-          >
-            Себестоимость
-          </label>
-
-          <input
-            id="cost"
-            type="number"
-            min="0"
-            step="1"
-            value={cost}
-            onChange={(event) =>
-              setCost(event.target.value)
-            }
-            placeholder="0"
-            disabled={loading}
-            className="w-full rounded-lg border bg-background px-3 py-2"
-          />
-        </div>
-
-        {/* Информация об остатке */}
-
-        <div className="rounded-lg border bg-muted/40 p-4">
-          <div className="text-sm font-medium">
-            Начальный остаток
-          </div>
-
-          <div className="mt-1 text-2xl font-bold">
-            0
-          </div>
-
-          <p className="mt-2 text-sm text-muted-foreground">
-            Остаток нельзя вводить вручную. Для добавления
-            товара на склад создайте поставку — она создаст
-            партию и автоматически увеличит остаток.
-          </p>
-        </div>
-
-        {/* Кнопки */}
-
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading
-              ? "Создание..."
-              : "Создать товар"}
-          </button>
-
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => router.push("/products")}
-            className="rounded-lg border px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Отмена
-          </button>
-        </div>
-      </form>
     </main>
   );
 }

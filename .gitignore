@@ -76,3 +76,4 @@ next-env.d.ts
 
 # Local database backups
 /dev_backup_*.db
+certificates

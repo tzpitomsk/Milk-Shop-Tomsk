@@ -24,10 +24,8 @@ export async function GET() {
       orderBy: {
         date: "desc",
       },
-
       include: {
         Supplier: true,
-
         items: {
           include: {
             product: true,
@@ -223,7 +221,6 @@ export async function POST(request: Request) {
           in: productIds,
         },
       },
-
       select: {
         id: true,
         name: true,
@@ -278,9 +275,7 @@ export async function POST(request: Request) {
         const newSupply = await tx.supply.create({
           data: {
             supplierId,
-
             total,
-
             items: {
               create: normalizedItems.map(
                 (item: SupplyInputItem) => ({
@@ -291,10 +286,8 @@ export async function POST(request: Request) {
               ),
             },
           },
-
           include: {
             Supplier: true,
-
             items: {
               include: {
                 product: true,
@@ -319,16 +312,29 @@ export async function POST(request: Request) {
           await tx.batch.create({
             data: {
               productId: item.id,
-
               quantity: item.quantity,
-
               purchaseCost: item.cost,
-
               receivedAt: new Date(),
-
               expiryDate,
-
               status: "ACTIVE",
+            },
+          });
+
+          // ==================================
+          // Обновляем текущую себестоимость
+          // товара.
+          //
+          // ВАЖНО:
+          // это НЕ меняет purchaseCost уже
+          // существующих Batch.
+          // ==================================
+
+          await tx.product.update({
+            where: {
+              id: item.id,
+            },
+            data: {
+              cost: item.cost,
             },
           });
 
@@ -339,12 +345,8 @@ export async function POST(request: Request) {
           await tx.movement.create({
             data: {
               type: "SUPPLY",
-
               quantity: item.quantity,
-
-              comment:
-                `Приход поставка №${newSupply.id}`,
-
+              comment: `Приход поставка №${newSupply.id}`,
               productId: item.id,
             },
           });

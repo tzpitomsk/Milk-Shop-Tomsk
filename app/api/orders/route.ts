@@ -3,47 +3,117 @@ import { NextResponse } from "next/server";
 import { updateProductStock } from "@/lib/update-stock";
 
 // ==================================================
+// DELIVERY DATE
+// ==================================================
+
+function getDeliveryDate(orderDate: Date): Date {
+const deliveryDate = new Date(orderDate);
+
+const dayOfWeek = deliveryDate.getDay();
+
+/*
+
+* JavaScript:
+*
+* 0 = воскресенье
+* 1 = понедельник
+* 2 = вторник
+* 3 = среда
+* 4 = четверг
+* 5 = пятница
+* 6 = суббота
+*
+* Правила Milk Shop:
+*
+* Пн → ближайший четверг
+* Вт → ближайший четверг
+* Ср → ближайший четверг
+* Чт → этот четверг
+* Пт → ближайшее воскресенье
+* Сб → ближайшее воскресенье
+* Вс → следующий четверг
+  */
+
+if (
+dayOfWeek === 1 ||
+dayOfWeek === 2 ||
+dayOfWeek === 3
+) {
+deliveryDate.setDate(
+deliveryDate.getDate() +
+(4 - dayOfWeek)
+);
+} else if (dayOfWeek === 4) {
+// Четверг → доставка в этот же день.
+} else if (
+dayOfWeek === 5 ||
+dayOfWeek === 6
+) {
+deliveryDate.setDate(
+deliveryDate.getDate() +
+(7 - dayOfWeek)
+);
+} else {
+// Воскресенье → следующий четверг.
+deliveryDate.setDate(
+deliveryDate.getDate() + 4
+);
+}
+
+return deliveryDate;
+}
+
+// ==================================================
 // GET - получение заказов
 // ==================================================
 
 export async function GET() {
-  try {
-    const orders = await prisma.order.findMany({
-      orderBy: {
-        date: "desc",
-      },
-      include: {
-        customer: true,
-        items: {
-          include: {
-            product: true,
-            batches: {
-              include: {
-                batch: true,
-              },
-              orderBy: {
-                id: "asc",
-              },
-            },
-            ReturnBatch: true,
-          },
-        },
-      },
-    });
+try {
+const orders = await prisma.order.findMany({
+orderBy: {
+date: "desc",
+},
+include: {
+customer: true,
+items: {
+include: {
+product: true,
+batches: {
+include: {
+batch: true,
+},
+orderBy: {
+id: "asc",
+},
+},
+ReturnBatch: true,
+},
+},
+},
+});
 
-    return NextResponse.json(orders);
-  } catch (error: any) {
-    console.error("GET ORDERS ERROR:", error);
 
-    return NextResponse.json(
-      {
-        error: "Ошибка загрузки заказов",
-      },
-      {
-        status: 500,
-      }
-    );
+return NextResponse.json(orders);
+
+
+} catch (error: any) {
+console.error(
+"GET ORDERS ERROR:",
+error
+);
+
+
+return NextResponse.json(
+  {
+    error: "Ошибка загрузки заказов",
+  },
+  {
+    status: 500,
   }
+);
+
+
+}
 }
 
 // ==================================================
@@ -51,90 +121,119 @@ export async function GET() {
 // ==================================================
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
+try {
+const body = await request.json();
 
+
+// ==================================================
+// Проверяем товары
+// ==================================================
+
+if (
+  !body.items ||
+  !Array.isArray(body.items)
+) {
+  throw new Error(
+    "В заказе нет товаров"
+  );
+}
+
+if (body.items.length === 0) {
+  throw new Error(
+    "Нельзя создать пустой заказ"
+  );
+}
+
+// ==================================================
+// Подготавливаем товары
+//
+// ВАЖНО:
+// price из клиента пока принимаем только для совместимости
+// с текущим frontend.
+//
+// Фактическую цену ниже получаем из Product на сервере.
+// ==================================================
+
+const requestedItems: {
+  productId: number;
+  quantity: number;
+}[] = body.items.map((item: any) => {
+  const productId = Number(item.id);
+  const quantity = Number(
+    item.quantity
+  );
+
+  if (
+    !Number.isInteger(productId) ||
+    productId <= 0
+  ) {
+    throw new Error(
+      "Некорректный товар"
+    );
+  }
+
+  if (
+    !Number.isInteger(quantity) ||
+    quantity <= 0
+  ) {
+    throw new Error(
+      "Некорректное количество"
+    );
+  }
+
+  return {
+    productId,
+    quantity,
+  };
+});
+
+// ==================================================
+// TRANSACTION
+// ==================================================
+
+const order = await prisma.$transaction(
+  async (tx) => {
     // ==================================================
-    // Проверяем товары
-    // ==================================================
-
-    if (!body.items || !Array.isArray(body.items)) {
-      throw new Error("В заказе нет товаров");
-    }
-
-    if (body.items.length === 0) {
-      throw new Error("Нельзя создать пустой заказ");
-    }
-
-    // ==================================================
-    // Подготавливаем товары
+    // Дата заказа
     //
-    // ВАЖНО:
-    // price из клиента пока принимаем только для совместимости
-    // с текущим frontend.
+    // Партия может быть использована только если:
     //
-    // Фактическую цену ниже получаем из Product на сервере.
+    // receivedAt <= orderDate
+    //
+    // и партия уже действующая:
+    //
+    // status = ACTIVE
+    //
+    // и срок годности ещё не истёк:
+    //
+    // expiryDate >= orderDate
     // ==================================================
 
-    const requestedItems: {
-      productId: number;
-      quantity: number;
-    }[] = body.items.map((item: any) => {
-      const productId = Number(item.id);
-      const quantity = Number(item.quantity);
-
-      if (!Number.isInteger(productId) || productId <= 0) {
-        throw new Error("Некорректный товар");
-      }
-
-      if (!Number.isInteger(quantity) || quantity <= 0) {
-        throw new Error("Некорректное количество");
-      }
-
-      return {
-        productId,
-        quantity,
-      };
-    });
+    const orderDate = new Date();
 
     // ==================================================
-    // TRANSACTION
+    // Автоматически определяем дату доставки
     // ==================================================
 
-    const order = await prisma.$transaction(async (tx) => {
-      // ==================================================
-      // Дата заказа
-      //
-      // Партия может быть использована только если:
-      //
-      // receivedAt <= orderDate
-      //
-      // и партия уже действующая:
-      //
-      // status = ACTIVE
-      //
-      // и срок годности ещё не истёк:
-      //
-      // expiryDate >= orderDate
-      // ==================================================
+    const deliveryDate =
+      getDeliveryDate(orderDate);
 
-      const orderDate = new Date();
+    // ==================================================
+    // Загружаем товары с сервера
+    //
+    // Цена НЕ доверяется клиенту.
+    // ==================================================
 
-      // ==================================================
-      // Загружаем товары с сервера
-      //
-      // Цена НЕ доверяется клиенту.
-      // ==================================================
+    const productIds = [
+      ...new Set(
+        requestedItems.map(
+          (item) => item.productId
+        )
+      ),
+    ];
 
-      const productIds = [
-        ...new Set(
-          requestedItems.map(
-            (item) => item.productId
-          )
-        ),
-      ];
-
-      const products = await tx.product.findMany({
+    const products =
+      await tx.product.findMany({
         where: {
           id: {
             in: productIds,
@@ -142,222 +241,308 @@ export async function POST(request: Request) {
         },
       });
 
-      const productMap = new Map(
-        products.map((product) => [
-          product.id,
-          product,
-        ])
-      );
+    const productMap = new Map(
+      products.map((product) => [
+        product.id,
+        product,
+      ])
+    );
 
-      // ==================================================
-      // Проверяем существование товаров
-      // ==================================================
+    // ==================================================
+    // Проверяем существование товаров
+    // ==================================================
 
-      for (const item of requestedItems) {
-        const product = productMap.get(
+    for (const item of requestedItems) {
+      const product =
+        productMap.get(
           item.productId
         );
 
-        if (!product) {
-          throw new Error(
-            `Товар ${item.productId} не найден`
-          );
-        }
+      if (!product) {
+        throw new Error(
+          `Товар ${item.productId} не найден`
+        );
       }
+    }
 
-      // ==================================================
-      // Проверяем customerId
-      // ==================================================
+    // ==================================================
+    // Проверяем customerId
+    // ==================================================
 
-      let customerId: number | null = null;
+    let customerId: number | null =
+      null;
+
+    if (
+      body.customerId !==
+        undefined &&
+      body.customerId !== null &&
+      body.customerId !== ""
+    ) {
+      const parsedCustomerId =
+        Number(body.customerId);
 
       if (
-        body.customerId !== undefined &&
-        body.customerId !== null &&
-        body.customerId !== ""
+        !Number.isInteger(
+          parsedCustomerId
+        ) ||
+        parsedCustomerId <= 0
       ) {
-        const parsedCustomerId = Number(
-          body.customerId
+        throw new Error(
+          "Некорректный покупатель"
         );
-
-        if (
-          !Number.isInteger(parsedCustomerId) ||
-          parsedCustomerId <= 0
-        ) {
-          throw new Error(
-            "Некорректный покупатель"
-          );
-        }
-
-        const customer =
-          await tx.customer.findUnique({
-            where: {
-              id: parsedCustomerId,
-            },
-            select: {
-              id: true,
-            },
-          });
-
-        if (!customer) {
-          throw new Error(
-            "Выбранный покупатель не найден"
-          );
-        }
-
-        customerId = customer.id;
       }
 
-      // ==================================================
-      // Нормализуем позиции
-      //
-      // Цена берётся ТОЛЬКО из Product.price.
-      // ==================================================
+      const customer =
+        await tx.customer.findUnique({
+          where: {
+            id: parsedCustomerId,
+          },
+          select: {
+            id: true,
+          },
+        });
 
-      const items = requestedItems.map(
+      if (!customer) {
+        throw new Error(
+          "Выбранный покупатель не найден"
+        );
+      }
+
+      customerId = customer.id;
+    }
+
+    // ==================================================
+    // Нормализуем позиции
+    //
+    // Цена берётся ТОЛЬКО из Product.price.
+    // ==================================================
+
+    const items =
+      requestedItems.map(
         (item) => {
-          const product = productMap.get(
-            item.productId
-          )!;
+          const product =
+            productMap.get(
+              item.productId
+            )!;
 
           return {
-            productId: item.productId,
-            quantity: item.quantity,
+            productId:
+              item.productId,
+            quantity:
+              item.quantity,
             price: product.price,
           };
         }
       );
 
-      // ==================================================
-      // Проверяем доступный товар
-      //
-      // КРИТИЧЕСКИ ВАЖНО:
-      //
-      // Используем те же условия, что и при FIFO:
-      //
-      // 1. quantity > 0
-      // 2. status = ACTIVE
-      // 3. receivedAt <= orderDate
-      // 4. expiryDate >= orderDate
-      //
-      // Поэтому проверка остатка и фактическое списание
-      // работают с одним и тем же набором партий.
-      // ==================================================
+    // ==================================================
+    // Проверяем доступный товар
+    //
+    // КРИТИЧЕСКИ ВАЖНО:
+    //
+    // Используем те же условия, что и при FIFO:
+    //
+    // 1. quantity > 0
+    // 2. status = ACTIVE
+    // 3. receivedAt <= orderDate
+    // 4. expiryDate >= orderDate
+    //
+    // Поэтому проверка остатка и фактическое списание
+    // работают с одним и тем же набором партий.
+    // ==================================================
 
-      for (const item of items) {
-        const product =
-          productMap.get(item.productId)!;
+    for (const item of items) {
+      const product =
+        productMap.get(
+          item.productId
+        )!;
 
-        const stock =
-          await tx.batch.aggregate({
-            where: {
-              productId: item.productId,
-              quantity: {
-                gt: 0,
-              },
-              status: "ACTIVE",
-              receivedAt: {
-                lte: orderDate,
-              },
-              expiryDate: {
-                gte: orderDate,
-              },
+      const stock =
+        await tx.batch.aggregate({
+          where: {
+            productId:
+              item.productId,
+            quantity: {
+              gt: 0,
             },
-            _sum: {
-              quantity: true,
+            status: "ACTIVE",
+            receivedAt: {
+              lte: orderDate,
             },
-          });
+            expiryDate: {
+              gte: orderDate,
+            },
+          },
+          _sum: {
+            quantity: true,
+          },
+        });
 
-        const available =
-          stock._sum.quantity ?? 0;
+      const available =
+        stock._sum.quantity ?? 0;
 
-        if (available < item.quantity) {
-          throw new Error(
-            `Недостаточно товара "${product.name}". ` +
-              `Доступно: ${available}, ` +
-              `требуется: ${item.quantity}`
-          );
-        }
+      if (
+        available < item.quantity
+      ) {
+        throw new Error(
+          `Недостаточно товара "${product.name}". ` +
+            `Доступно: ${available}, ` +
+            `требуется: ${item.quantity}`
+        );
       }
+    }
 
-      // ==================================================
-      // Рассчитываем total на сервере
-      // ==================================================
+    // ==================================================
+    // Рассчитываем total на сервере
+    // ==================================================
 
-      const calculatedTotal = items.reduce(
+    const calculatedTotal =
+      items.reduce(
         (sum, item) => {
           return (
             sum +
-            item.quantity * item.price
+            item.quantity *
+              item.price
           );
         },
         0
       );
 
+    // ==================================================
+    // Создаём заказ
+    // ==================================================
+
+    const createdOrder =
+      await tx.order.create({
+        data: {
+          total:
+            calculatedTotal,
+          profit: 0,
+          date: orderDate,
+          customerId,
+          deliveryStatus:
+            "PENDING",
+          deliveryPriority: 0,
+          deliveryDate,
+          deliveredAt: null,
+          deliverySkipReason:
+            null,
+          items: {
+            create: items.map(
+              (item) => ({
+                productId:
+                  item.productId,
+                quantity:
+                  item.quantity,
+                price: item.price,
+              })
+            ),
+          },
+        },
+      });
+
+    // ==================================================
+    // Получаем созданные позиции заказа
+    // ==================================================
+
+    const orderItems =
+      await tx.orderItem.findMany({
+        where: {
+          orderId:
+            createdOrder.id,
+        },
+        orderBy: {
+          id: "asc",
+        },
+      });
+
+    let totalProfit = 0;
+
+    // ==================================================
+    // FIFO / FEFO списание
+    // ==================================================
+
+    for (const orderItem of orderItems) {
+      let remaining =
+        orderItem.quantity;
+
+      let cost = 0;
+
       // ==================================================
-      // Создаём заказ
+      // Получаем только реально продаваемые партии
+      //
+      // Приоритет:
+      //
+      // 1. expiryDate
+      // 2. receivedAt
+      // 3. id
+      //
+      // Таким образом FIFO/FEFO полностью детерминирован.
       // ==================================================
 
-      const createdOrder =
-        await tx.order.create({
-          data: {
-            total: calculatedTotal,
-            profit: 0,
-            date: orderDate,
-            customerId,
-            items: {
-              create: items.map((item) => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                price: item.price,
-              })),
+      const batches =
+        await tx.batch.findMany({
+          where: {
+            productId:
+              orderItem.productId,
+            quantity: {
+              gt: 0,
+            },
+            status: "ACTIVE",
+            receivedAt: {
+              lte: orderDate,
+            },
+            expiryDate: {
+              gte: orderDate,
             },
           },
+          orderBy: [
+            {
+              expiryDate: "asc",
+            },
+            {
+              receivedAt: "asc",
+            },
+            {
+              id: "asc",
+            },
+          ],
         });
 
       // ==================================================
-      // Получаем созданные позиции заказа
+      // Списываем по партиям
       // ==================================================
 
-      const orderItems =
-        await tx.orderItem.findMany({
-          where: {
-            orderId: createdOrder.id,
-          },
-          orderBy: {
-            id: "asc",
-          },
-        });
+      for (const batch of batches) {
+        if (remaining <= 0) {
+          break;
+        }
 
-      let totalProfit = 0;
+        const take = Math.min(
+          batch.quantity,
+          remaining
+        );
 
-      // ==================================================
-      // FIFO / FEFO списание
-      // ==================================================
-
-      for (const orderItem of orderItems) {
-        let remaining = orderItem.quantity;
-        let cost = 0;
+        if (take <= 0) {
+          continue;
+        }
 
         // ==================================================
-        // Получаем только реально продаваемые партии
+        // Атомарная защита остатка партии
         //
-        // Приоритет:
-        //
-        // 1. expiryDate
-        // 2. receivedAt
-        // 3. id
-        //
-        // Таким образом FIFO/FEFO полностью детерминирован.
+        // Повторно проверяем:
+        // - количество
+        // - статус
+        // - дату поступления
+        // - срок годности
         // ==================================================
 
-        const batches =
-          await tx.batch.findMany({
+        const updated =
+          await tx.batch.updateMany({
             where: {
-              productId:
-                orderItem.productId,
+              id: batch.id,
               quantity: {
-                gt: 0,
+                gte: take,
               },
               status: "ACTIVE",
               receivedAt: {
@@ -367,255 +552,215 @@ export async function POST(request: Request) {
                 gte: orderDate,
               },
             },
-            orderBy: [
-              {
-                expiryDate: "asc",
-              },
-              {
-                receivedAt: "asc",
-              },
-              {
-                id: "asc",
-              },
-            ],
-          });
-
-        // ==================================================
-        // Списываем по партиям
-        // ==================================================
-
-        for (const batch of batches) {
-          if (remaining <= 0) {
-            break;
-          }
-
-          const take = Math.min(
-            batch.quantity,
-            remaining
-          );
-
-          if (take <= 0) {
-            continue;
-          }
-
-          // ==================================================
-          // Атомарная защита остатка партии
-          //
-          // Повторно проверяем:
-          // - количество
-          // - статус
-          // - дату поступления
-          // - срок годности
-          // ==================================================
-
-          const updated =
-            await tx.batch.updateMany({
-              where: {
-                id: batch.id,
-                quantity: {
-                  gte: take,
-                },
-                status: "ACTIVE",
-                receivedAt: {
-                  lte: orderDate,
-                },
-                expiryDate: {
-                  gte: orderDate,
-                },
-              },
-              data: {
-                quantity: {
-                  decrement: take,
-                },
-              },
-            });
-
-          if (updated.count === 0) {
-            // Партия изменилась.
-            // Переходим к следующей.
-            continue;
-          }
-
-          // ==================================================
-          // Фиксируем фактическую партию продажи
-          //
-          // purchaseCost сохраняется как исторический
-          // snapshot себестоимости на момент продажи.
-          //
-          // НЕ нужно потом синхронизировать его с Batch.
-          // ==================================================
-
-          await tx.orderBatch.create({
             data: {
-              quantity: take,
-              purchaseCost:
-                batch.purchaseCost,
-              orderItemId: orderItem.id,
-              batchId: batch.id,
+              quantity: {
+                decrement: take,
+              },
             },
           });
 
-          // ==================================================
-          // Себестоимость
-          // ==================================================
-
-          cost +=
-            take * batch.purchaseCost;
-
-          remaining -= take;
-
-          // ==================================================
-          // Обновляем статус партии
-          //
-          // batch.quantity — значение до decrement.
-          // Поэтому:
-          //
-          // batch.quantity - take > 0
-          //     => ACTIVE
-          //
-          // иначе:
-          //     => EMPTY
-          // ==================================================
-
-          await tx.batch.update({
-            where: {
-              id: batch.id,
-            },
-            data: {
-              status:
-                batch.quantity - take > 0
-                  ? "ACTIVE"
-                  : "EMPTY",
-            },
-          });
+        if (updated.count === 0) {
+          // Партия изменилась.
+          // Переходим к следующей.
+          continue;
         }
 
         // ==================================================
-        // Обязательно проверяем полное списание
-        // ==================================================
-
-        if (remaining > 0) {
-          throw new Error(
-            `FIFO ошибка. Не удалось полностью списать товар "${orderItem.productId}". ` +
-              `Осталось списать: ${remaining} шт.`
-          );
-        }
-
-        // ==================================================
-        // Выручка позиции
-        // ==================================================
-
-        const revenue =
-          orderItem.price *
-          orderItem.quantity;
-
-        // ==================================================
-        // Прибыль позиции
+        // Фиксируем фактическую партию продажи
         //
-        // При создании заказа возвратов ещё нет,
-        // поэтому это одновременно gross и net profit.
+        // purchaseCost сохраняется как исторический
+        // snapshot себестоимости на момент продажи.
+        //
+        // НЕ нужно потом синхронизировать его с Batch.
         // ==================================================
 
-        totalProfit +=
-          revenue - cost;
-
-        // ==================================================
-        // История движения
-        // ==================================================
-
-        await tx.movement.create({
+        await tx.orderBatch.create({
           data: {
-            type: "SALE",
-            quantity:
-              -orderItem.quantity,
-            comment: `Продажа. Заказ №${createdOrder.id}`,
-            productId:
-              orderItem.productId,
+            quantity: take,
+            purchaseCost:
+              batch.purchaseCost,
+            orderItemId:
+              orderItem.id,
+            batchId: batch.id,
+          },
+        });
+
+        // ==================================================
+        // Себестоимость
+        // ==================================================
+
+        cost +=
+          take *
+          batch.purchaseCost;
+
+        remaining -= take;
+
+        // ==================================================
+        // Обновляем статус партии
+        //
+        // batch.quantity — значение до decrement.
+        // Поэтому:
+        //
+        // batch.quantity - take > 0
+        //     => ACTIVE
+        //
+        // иначе:
+        //     => EMPTY
+        // ==================================================
+
+        await tx.batch.update({
+          where: {
+            id: batch.id,
+          },
+          data: {
+            status:
+              batch.quantity -
+                take >
+              0
+                ? "ACTIVE"
+                : "EMPTY",
           },
         });
       }
 
       // ==================================================
-      // Пересчитываем Product.stock
+      // Обязательно проверяем полное списание
       // ==================================================
 
-      const affectedProductIds = [
-        ...new Set(
-          orderItems.map(
-            (item) => item.productId
-          )
-        ),
-      ];
-
-      for (const productId of affectedProductIds) {
-        await updateProductStock(
-          tx,
-          productId
+      if (remaining > 0) {
+        throw new Error(
+          `FIFO ошибка. Не удалось полностью списать товар "${orderItem.productId}". ` +
+            `Осталось списать: ${remaining} шт.`
         );
       }
 
       // ==================================================
-      // Сохраняем итоговые данные заказа
-      //
-      // total:
-      // сумма продажи ДО возможных возвратов.
-      //
-      // profit:
-      // прибыль ДО возможных возвратов.
-      //
-      // При возврате отдельный API должен пересчитать
-      // их в NET-значения.
+      // Выручка позиции
       // ==================================================
 
-      const result =
-        await tx.order.update({
-          where: {
-            id: createdOrder.id,
-          },
-          data: {
-            total: calculatedTotal,
-            profit: totalProfit,
-          },
-          include: {
-            customer: true,
-            items: {
-              include: {
-                product: true,
-                batches: {
-                  include: {
-                    batch: true,
-                  },
-                  orderBy: {
-                    id: "asc",
-                  },
+      const revenue =
+        orderItem.price *
+        orderItem.quantity;
+
+      // ==================================================
+      // Прибыль позиции
+      //
+      // При создании заказа возвратов ещё нет,
+      // поэтому это одновременно gross и net profit.
+      // ==================================================
+
+      totalProfit +=
+        revenue - cost;
+
+      // ==================================================
+      // История движения
+      // ==================================================
+
+      await tx.movement.create({
+        data: {
+          type: "SALE",
+          quantity:
+            -orderItem.quantity,
+          comment: `Продажа. Заказ №${createdOrder.id}`,
+          productId:
+            orderItem.productId,
+        },
+      });
+    }
+
+    // ==================================================
+    // Пересчитываем Product.stock
+    // ==================================================
+
+    const affectedProductIds = [
+      ...new Set(
+        orderItems.map(
+          (item) =>
+            item.productId
+        )
+      ),
+    ];
+
+    for (const productId of
+      affectedProductIds) {
+      await updateProductStock(
+        tx,
+        productId
+      );
+    }
+
+    // ==================================================
+    // Сохраняем итоговые данные заказа
+    //
+    // total:
+    // сумма продажи ДО возможных возвратов.
+    //
+    // profit:
+    // прибыль ДО возможных возвратов.
+    //
+    // При возврате отдельный API должен пересчитать
+    // их в NET-значения.
+    // ==================================================
+
+    const result =
+      await tx.order.update({
+        where: {
+          id: createdOrder.id,
+        },
+        data: {
+          total:
+            calculatedTotal,
+          profit: totalProfit,
+        },
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+              batches: {
+                include: {
+                  batch: true,
                 },
-                ReturnBatch: true,
+                orderBy: {
+                  id: "asc",
+                },
               },
+              ReturnBatch: true,
             },
           },
-        });
+        },
+      });
 
-      return result;
-    });
-
-    return NextResponse.json(order, {
-      status: 201,
-    });
-  } catch (error: any) {
-    console.error(
-      "ORDER ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          error?.message ||
-          "Ошибка создания заказа",
-      },
-      {
-        status: 500,
-      }
-    );
+    return result;
   }
+);
+
+return NextResponse.json(
+  order,
+  {
+    status: 201,
+  }
+);
+
+
+} catch (error: any) {
+console.error(
+"ORDER ERROR:",
+error
+);
+
+
+return NextResponse.json(
+  {
+    error:
+      error?.message ||
+      "Ошибка создания заказа",
+  },
+  {
+    status: 500,
+  }
+);
+
+
+}
 }

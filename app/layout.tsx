@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+
 import { Geist, Geist_Mono } from "next/font/google";
+
 import "./globals.css";
 
 import BottomNav from "@/components/bottom-nav";
+import ServiceWorkerRegister from "@/components/service-worker-register";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,7 +19,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Milk Shop",
-  description: "Система магазина",
+  description: "Система управления магазином Milk Shop",
+
+  icons: {
+    icon: [
+      {
+        url: "/icon-192.png",
+        type: "image/png",
+      },
+      {
+        url: "/icon-512.png",
+        type: "image/png",
+      },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -27,16 +44,16 @@ export default function RootLayout({
   return (
     <html
       lang="ru"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} min-h-full antialiased`}
     >
-      <body className="min-h-screen flex flex-col pb-20">
+      <body className="min-h-screen flex flex-col bg-slate-100 pb-20">
+        <ServiceWorkerRegister />
 
         {children}
 
         <div className="print:hidden">
           <BottomNav />
         </div>
-
       </body>
     </html>
   );

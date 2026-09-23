@@ -31,7 +31,6 @@ function getOrderFinancials(order: FinanceOrder) {
   for (const item of order.items) {
     const realSoldQuantity = item.quantity - item.returned;
 
-
     revenue += item.price * realSoldQuantity;
 
     for (const orderBatch of item.batches) {
@@ -44,8 +43,6 @@ function getOrderFinancials(order: FinanceOrder) {
         returnBatch.quantity *
         returnBatch.Batch.purchaseCost;
     }
-
-
   }
 
   const netCost = originalCost - returnedCost;
@@ -58,8 +55,24 @@ function getOrderFinancials(order: FinanceOrder) {
   };
 }
 
-export async function GET() {
+function isToday(dateValue: Date | string): boolean {
+  const date = new Date(dateValue);
+  const today = new Date();
+
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  );
+}
+
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+
+    const period =
+      searchParams.get("period") === "all" ? "all" : "today";
+
     const orders = await prisma.order.findMany({
       include: {
         items: {
@@ -78,64 +91,67 @@ export async function GET() {
       },
     });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const selectedOrders =
+      period === "all"
+        ? orders
+        : orders.filter((order) => isToday(order.date));
 
-    const todayOrders = orders.filter(
-      (order) => new Date(order.date) >= today
+    let revenue = 0;
+    let profit = 0;
+
+    for (const order of selectedOrders) {
+      const financials = getOrderFinancials(order);
+
+      revenue += financials.revenue;
+      profit += financials.profit;
+    }
+
+    const expenses = await prisma.expense.findMany({
+      orderBy: [
+        {
+          date: "desc",
+        },
+        {
+          id: "desc",
+        },
+      ],
+    });
+
+    const selectedExpenses =
+      period === "all"
+        ? expenses
+        : expenses.filter((expense) =>
+            isToday(expense.date)
+          );
+
+    const expensesTotal = selectedExpenses.reduce(
+      (sum, expense) => sum + expense.amount,
+      0
     );
 
-    let revenueToday = 0;
-    let profitToday = 0;
+    const netProfit = profit - expensesTotal;
 
-    for (const order of todayOrders) {
-      const financials = getOrderFinancials(order);
+    const ordersCount = selectedOrders.length;
 
-      revenueToday += financials.revenue;
-      profitToday += financials.profit;
-    }
-
-    let revenueTotal = 0;
-    let profitTotal = 0;
-
-    for (const order of orders) {
-      const financials = getOrderFinancials(order);
-
-      revenueTotal += financials.revenue;
-      profitTotal += financials.profit;
-    }
-
-    const ordersToday = todayOrders.length;
-    const ordersTotal = orders.length;
-
-    const averageCheck = ordersTotal
-      ? Math.round(revenueTotal / ordersTotal)
+    const averageCheck = ordersCount
+      ? Math.round(revenue / ordersCount)
       : 0;
 
     return NextResponse.json({
-      revenueToday,
-      profitToday,
-      ordersToday,
-
-      revenueTotal,
-      profitTotal,
-      ordersTotal,
-
+      period,
+      revenue,
+      profit,
+      expenses: expensesTotal,
+      netProfit,
+      ordersCount,
       averageCheck,
     });
-
   } catch (error) {
-    console.error(error);
+    console.error("FINANCE GET ERROR:", error);
 
     return NextResponse.json(
-      {
-        error: "Ошибка загрузки финансов",
-      },
-      {
-        status: 500,
-      }
+      { error: "Ошибка загрузки финансов" },
+      { status: 500 }
     );
-
-
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type Product = {
@@ -20,14 +21,29 @@ export default function StockPage() {
   }, []);
 
   async function loadProducts() {
-    const res = await fetch("/api/products");
-    const data = await res.json();
-    setProducts(data);
+    try {
+      const res = await fetch("/api/products");
+
+      if (!res.ok) {
+        throw new Error("Не удалось загрузить товары");
+      }
+
+      const data = await res.json();
+      setProducts(data);
+    } catch (error) {
+      console.error("STOCK LOAD ERROR:", error);
+    }
   }
 
   const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) {
+      return products;
+    }
+
     return products.filter((product) =>
-      product.name.toLowerCase().includes(search.toLowerCase())
+      product.name.toLowerCase().includes(query)
     );
   }, [products, search]);
 
@@ -47,8 +63,7 @@ export default function StockPage() {
   return (
     <main className="min-h-screen bg-slate-100 p-4">
       <div className="mx-auto max-w-md">
-
-        <h1 className="mb-6 text-3xl font-bold text-green-700">
+        <h1 className="mb-5 text-3xl font-bold text-green-700">
           📦 Склад
         </h1>
 
@@ -57,50 +72,59 @@ export default function StockPage() {
           placeholder="🔍 Поиск товара..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="mb-4 w-full rounded-xl border bg-white p-3"
+          className="mb-3 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base outline-none focus:border-green-600"
         />
 
-        <div className="mb-4 text-sm text-gray-500">
-          Товаров: <strong>{filteredProducts.length}</strong>
+        <div className="mb-3 text-sm text-gray-500">
+          Товаров:{" "}
+          <strong className="text-gray-700">
+            {filteredProducts.length}
+          </strong>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {filteredProducts.map((product) => (
-            <div
+            <Link
               key={product.id}
-              className="rounded-xl bg-white p-4 shadow"
+              href={`/products/${product.id}`}
+              className="block rounded-xl bg-white px-3 py-3 shadow-sm transition active:bg-gray-50"
             >
-              <div className="flex justify-between items-start">
-
-                <div>
-
-                  <div className="text-lg font-bold">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-lg font-bold text-gray-900">
                     {product.name}
                   </div>
 
-                  <div className="text-gray-500">
-                    Цена: {product.price} ₽
+                  <div className="mt-1 text-sm text-gray-500">
+                    Цена {product.price} ₽ · Себ. {product.cost} ₽
                   </div>
-
-                  <div className="text-gray-500">
-                    Себестоимость: {product.cost} ₽
-                  </div>
-
-                  <div className={`mt-2 font-bold ${stockColor(product.stock)}`}>
-                    {product.stock} {product.unit}
-                  </div>
-
-                  <div className={`text-sm ${stockColor(product.stock)}`}>
-                    {stockLabel(product.stock)}
-                  </div>
-
                 </div>
 
+                <div
+                  className={`shrink-0 text-right text-lg font-bold ${stockColor(
+                    product.stock
+                  )}`}
+                >
+                  {product.stock} {product.unit}
+                </div>
               </div>
-            </div>
+
+              <div
+                className={`mt-1 text-sm font-medium ${stockColor(
+                  product.stock
+                )}`}
+              >
+                {stockLabel(product.stock)}
+              </div>
+            </Link>
           ))}
         </div>
 
+        {filteredProducts.length === 0 && (
+          <div className="rounded-xl bg-white p-5 text-center text-gray-500 shadow-sm">
+            Товары не найдены
+          </div>
+        )}
       </div>
     </main>
   );

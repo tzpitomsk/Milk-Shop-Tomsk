@@ -35,7 +35,7 @@ model Batch {
 }
 
 model Customer {
-  id      Int     @id @default(autoincrement())
+  id      Int      @id @default(autoincrement())
   name    String
   phone   String?
   address String?
@@ -43,14 +43,20 @@ model Customer {
 }
 
 model Order {
-  id         Int         @id @default(autoincrement())
-  total      Int
-  profit     Int         @default(0)
-  date       DateTime    @default(now())
-  customerId Int?
-  status     OrderStatus @default(COMPLETED)
-  customer   Customer?   @relation(fields: [customerId], references: [id])
-  items      OrderItem[]
+  id                 Int         @id @default(autoincrement())
+  total              Int
+  profit             Int         @default(0)
+  date               DateTime    @default(now())
+  customerId         Int?
+  status             OrderStatus @default(COMPLETED)
+  deliveryStatus     String      @default("PENDING")
+  deliveryPriority   Int         @default(0)
+  deliveryDate       DateTime?
+  deliveredAt        DateTime?
+  deliverySkipReason String?
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
 }
 
 model OrderItem {
@@ -61,8 +67,8 @@ model OrderItem {
   productId   Int
   orderId     Int
   batches     OrderBatch[]
-  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product       @relation(fields: [productId], references: [id])
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product      @relation(fields: [productId], references: [id])
   ReturnBatch ReturnBatch[]
 }
 
@@ -121,6 +127,15 @@ model Supplier {
   phone   String?
   address String?
   Supply  Supply[]
+}
+
+model Expense {
+  id        Int      @id @default(autoincrement())
+  category  String
+  date      DateTime
+  amount    Int
+  comment   String?
+  createdAt DateTime @default(now())
 }
 
 enum OrderStatus {
